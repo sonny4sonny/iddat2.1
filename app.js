@@ -1,44 +1,47 @@
 const canvas = document.getElementById("vis");
 const ctx = canvas.getContext("2d");
-canvas.width = innerWidth;
-canvas.height = innerHeight;
+resize();
+window.addEventListener("resize", resize);
 
 let dragging = false;
 let fx = 0.5, fy = 0.5;
 
 let lat = 0, lon = 0;
-let mode = "bright";    
-let bpmValue = 100;
+let bpmValue = 120;
+let mode = "light";       
+let isDay = null;         
 let rPulse = 1;
 
 let synth, kick, kickLoop, melodyLoop;
 
-const SCALE_BRIGHT = ["C5","D5","E5","G5","A5"];
-const SCALE_DARK   = ["C3","Eb3","F3","G3","Bb3"];
+const SCALE_LIGHT = ["C5","D5","E5","G5","A5"];          
+const SCALE_DARK  = ["C3","Eb3","F3","G3","Bb3"];       
 
 function startSound() {
   synth = new Tone.Synth({
-    oscillator: { type: "sine" }, 
+    oscillator: { type: "sine" },
     envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.3 }
   }).toDestination();
 
-  kick  = new Tone.MembraneSynth().toDestination();
+  kick = new Tone.MembraneSynth().toDestination();
 
   kickLoop = new Tone.Loop(time => {
     kick.triggerAttackRelease("C2", "8n", time);
-    rPulse = 1.3;
+    rPulse = 1.25;
   }, "2n").start(0);
 
   melodyLoop = new Tone.Loop(time => {
-    const scale = mode === "bright" ? SCALE_BRIGHT : SCALE_DARK;
+    const scale = mode === "light" ? SCALE_LIGHT : SCALE_DARK;
 
     const idx = Math.max(0, Math.min(scale.length - 1, Math.floor(fx * scale.length)));
     const note = scale[idx];
 
-    const detune = (fx - 0.5) * 600;
-    synth.set({ detune, oscillator: { type: (lat >= 0 ? "triangle" : "sine") } });
+    const density = 0.2 + fy * 0.8;                
+    const detune = (fx - 0.5) * 600;                
+    const oscType = mode === "light" ? "triangle" : "sine";
 
-    const density = 0.2 + fy * 0.8;
+    synth.set({ detune, oscillator: { type: oscType } });
+
     if (Math.random() < density) {
       synth.triggerAttackRelease(note, "8n", time);
     }
@@ -47,33 +50,30 @@ function startSound() {
   Tone.Transport.start();
 }
 
-function draw() {
-  requestAnimationFrame(draw);
+async function updateFromGeo() {
+  const raw = 90 + ((lon + 180) / 360) * 80;   
+  bpmValue = Math.round(raw / 2) * 2;          
+  Tone.Transport.bpm.value = bpmValue;
 
-  const latNorm = (lat + 90) / 180;
-  const baseHue = mode === "bright" ? 45 : 210;
-  const lightness = mode === "bright" ? (72 + latNorm * 10) : (20 + (1 - latNorm) * 10);
-  ctx.fillStyle = `hsl(${baseHue}, 80%, ${lightness}%)`;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  try {
+    isDay = await fetchIsDay(lat, lon);
+    mode = isDay ? "light" : "dark";
+  } catch (e) {
+    console.warn("Open-Meteo failed, falling back to timezone guess:", e);
+    const utcHour = new Date().getUTCHours();
+    const offset = Math.round(lon / 15); 
+    const localHour = (utcHour + offset + 24) % 24;
+    mode = (localHour >= 6 && localHour < 18) ? "light" : "dark";
+    isDay = (mode === "light");
+  }
+}
 
-  ctx.fillStyle = mode === "bright" ? "#fd79a8" : "#74b9ff";
-  let r = 50 + fx * 200;
-  r *= rPulse;
-  ctx.beginPath();
-  ctx.arc(canvas.width * fx, canvas.height * fy, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  const hudX = canvas.width - 210, hudY = 12, hudW = 198, hudH = 70;
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(hudX, hudY, hudW, hudH);
-  ctx.fillStyle = "#fff";
-  ctx.font = "13px monospace";
-  ctx.textBaseline = "top";
-  ctx.fillText(`Mode: ${mode}`, hudX + 10, hudY + 8);
-  ctx.fillText(`BPM (lon): ${bpmValue.toFixed(0)}`, hudX + 10, hudY + 26);
-  ctx.fillText(`Lat: ${lat.toFixed(2)}  Lon: ${lon.toFixed(2)}`, hudX + 10, hudY + 44);
-
-  rPulse += (1 - rPulse) * 0.05;
+async function fetchIsDay(latitude, longitude) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=is_day`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Open-Meteo HTTP " + res.status);
+  const data = await res.json();
+  return data && data.current && Number(data.current.is_day) === 1;
 }
 
 canvas.addEventListener("pointerdown", e => { dragging = true; handlePointer(e); });
@@ -87,36 +87,65 @@ function handlePointer(e) {
   fy = (e.clientY - rect.top) / rect.height;
 }
 
-function setFromLocation() {
+function draw() {
+  requestAnimationFrame(draw);
+
+  const bg = mode === "light"
+    ? `hsl(45, 80%, 75%)`   
+    : `hsl(210, 60%, 18%)`; 
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = mode === "light" ? "#fd79a8" : "#74b9ff";
+  let r = 60 + fx * 220;
+  r *= rPulse;
+  ctx.beginPath();
+  ctx.arc(canvas.width * fx, canvas.height * fy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  const hudX = canvas.width - 240, hudY = 12, hudW = 228, hudH = 94;
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.fillRect(hudX, hudY, hudW, hudH);
+  ctx.fillStyle = "#fff";
+  ctx.font = "13px monospace";
+  ctx.textBaseline = "top";
+
+  const dayText = (isDay === null) ? "…"
+                  : isDay ? "Day" : "Night";
+
+  ctx.fillText(`Mode: ${mode.toUpperCase()} (${dayText})`, hudX + 10, hudY + 8);
+  ctx.fillText(`BPM (from lon): ${bpmValue}`, hudX + 10, hudY + 28);
+  ctx.fillText(`Lon: ${lon.toFixed(2)}`, hudX + 10, hudY + 48);
+  ctx.fillText(`X→note  Y→density`, hudX + 10, hudY + 68);
+
+  rPulse += (1 - rPulse) * 0.06;
+}
+
+document.getElementById("gate")?.addEventListener("click", async () => {
+  await Tone.start();            
+  startSound();
+  draw();
+
   if (!("geolocation" in navigator)) {
-    lat = 0; lon = 0;
-    applyGeoMappings();
+    alert("Geolocation not available — using default mappings.");
+    mode = "light";
+    isDay = null;
     return;
   }
-  navigator.geolocation.getCurrentPosition(pos => {
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
     lat = pos.coords.latitude;
     lon = pos.coords.longitude;
-    applyGeoMappings();
+    await updateFromGeo();
   }, () => {
-    lat = 0; lon = 0;
-    applyGeoMappings();
+    alert("Couldn’t get location — using defaults.");
   });
-}
 
-function applyGeoMappings() {
-  mode = lat < 0 ? "bright" : "dark";
-
-  const raw = 90 + ((lon + 180) / 360) * 80;   
-  bpmValue = Math.round(raw / 2) * 2;          
-  Tone.Transport.bpm.value = bpmValue;
-
-  console.log(`Geo → Mode:${mode}  BPM:${bpmValue}  Lat:${lat.toFixed(2)} Lon:${lon.toFixed(2)}`);
-}
-
-document.getElementById("gate")?.addEventListener("click", async ()=>{
-  await Tone.start();         
-  startSound();
-  setFromLocation();
   document.getElementById("gate").style.display = "none";
-  draw();
+
 });
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
