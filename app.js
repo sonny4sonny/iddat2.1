@@ -69,7 +69,7 @@ async function updateFromGeo() {
 }
 
 async function fetchIsDay(latitude, longitude) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=is_day`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=is_day`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Open-Meteo HTTP " + res.status);
   const data = await res.json();
