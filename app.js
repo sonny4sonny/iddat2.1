@@ -5,25 +5,32 @@ window.addEventListener("resize", resize);
 
 let dragging = false;
 let fx = 0.5, fy = 0.5;
-
 let lat = 0, lon = 0;
 let bpmValue = 120;
-let mode = "light";       
-let isDay = null;         
+let mode = "light"; 
+let isDay = null;
 let rPulse = 1;
 
-let synth, kick, kickLoop, melodyLoop;
+let synth, kick, pad, kickLoop, melodyLoop, padLoop;
 
-const SCALE_LIGHT = ["C5","D5","E5","G5","A5"];          
-const SCALE_DARK  = ["C3","Eb3","F3","G3","Bb3"];       
+const SCALE_LIGHT = ["C5","D5","E5","G5","A5"]; 
+const SCALE_DARK  = ["C3","Eb3","F3","G3","Bb3"]; 
 
 function startSound() {
+  
+  const reverb = new Tone.Reverb({ decay: 3, wet: 0.3 }).toDestination();
+
   synth = new Tone.Synth({
     oscillator: { type: "sine" },
     envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.3 }
-  }).toDestination();
+  }).connect(reverb);
 
-  kick = new Tone.MembraneSynth().toDestination();
+  kick = new Tone.MembraneSynth().connect(reverb);
+
+  pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: mode === "light" ? "triangle" : "sine" },
+    envelope: { attack: 1, decay: 1, sustain: 0.7, release: 4 }
+  }).connect(reverb);
 
   kickLoop = new Tone.Loop(time => {
     kick.triggerAttackRelease("C2", "8n", time);
@@ -35,9 +42,8 @@ function startSound() {
 
     const idx = Math.max(0, Math.min(scale.length - 1, Math.floor(fx * scale.length)));
     const note = scale[idx];
-
-    const density = 0.2 + fy * 0.8;                
-    const detune = (fx - 0.5) * 600;                
+    const density = 0.2 + fy * 0.8;
+    const detune = (fx - 0.5) * 600;
     const oscType = mode === "light" ? "triangle" : "sine";
 
     synth.set({ detune, oscillator: { type: oscType } });
@@ -47,21 +53,37 @@ function startSound() {
     }
   }, "8n").start(0);
 
+const padNotes = mode === "light"
+  ? ["C4","E4","A4","G4"]
+  : ["C3","Eb3","G3","Bb3"];
+let pIndex = 0;
+
+padLoop = new Tone.Loop(time => {
+  pad.triggerAttackRelease(padNotes[pIndex], "2n", time);
+  pIndex = (pIndex + 1) % padNotes.length;
+}, "2n").start(0);
+
+  padLoop = new Tone.Loop(time => {
+    pad.triggerRelease(chords[chordIndex], time);
+    chordIndex = (chordIndex + 1) % chords.length;
+    pad.triggerAttack(chords[chordIndex], time);
+  }, "4m").start(0);
+
   Tone.Transport.start();
 }
 
 async function updateFromGeo() {
-  const raw = 90 + ((lon + 180) / 360) * 80;   
-  bpmValue = Math.round(raw / 2) * 2;          
+  const raw = 90 + ((lon + 180) / 360) * 80; 
+  bpmValue = Math.round(raw / 2) * 2;
   Tone.Transport.bpm.value = bpmValue;
 
   try {
     isDay = await fetchIsDay(lat, lon);
     mode = isDay ? "light" : "dark";
   } catch (e) {
-    console.warn("Open-Meteo failed, falling back to timezone guess:", e);
+    console.warn("Open-Meteo failed, fallback to timezone guess:", e);
     const utcHour = new Date().getUTCHours();
-    const offset = Math.round(lon / 15); 
+    const offset = Math.round(lon / 15);
     const localHour = (utcHour + offset + 24) % 24;
     mode = (localHour >= 6 && localHour < 18) ? "light" : "dark";
     isDay = (mode === "light");
@@ -78,8 +100,8 @@ async function fetchIsDay(latitude, longitude) {
 
 canvas.addEventListener("pointerdown", e => { dragging = true; handlePointer(e); });
 canvas.addEventListener("pointermove", e => { if (dragging) handlePointer(e); });
-canvas.addEventListener("pointerup",   () => { dragging = false; });
-canvas.addEventListener("pointerleave",() => { dragging = false; });
+canvas.addEventListener("pointerup", () => { dragging = false; });
+canvas.addEventListener("pointerleave", () => { dragging = false; });
 
 function handlePointer(e) {
   const rect = canvas.getBoundingClientRect();
@@ -91,8 +113,8 @@ function draw() {
   requestAnimationFrame(draw);
 
   const bg = mode === "light"
-    ? `hsl(45, 80%, 75%)`   
-    : `hsl(210, 60%, 18%)`; 
+    ? `hsl(45, 80%, 75%)`
+    : `hsl(210, 60%, 18%)`;
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -110,19 +132,17 @@ function draw() {
   ctx.font = "13px monospace";
   ctx.textBaseline = "top";
 
-  const dayText = (isDay === null) ? "…"
-                  : isDay ? "Day" : "Night";
-
+  const dayText = (isDay === null) ? "…" : isDay ? "Day" : "Night";
   ctx.fillText(`Mode: ${mode.toUpperCase()} (${dayText})`, hudX + 10, hudY + 8);
-  ctx.fillText(`BPM (from lon): ${bpmValue}`, hudX + 10, hudY + 28);
-  ctx.fillText(`Lon: ${lon.toFixed(2)}`, hudX + 10, hudY + 48);
+  ctx.fillText(`BPM (lon): ${bpmValue}`, hudX + 10, hudY + 28);
+  ctx.fillText(`Lat: ${lat.toFixed(2)}  Lon: ${lon.toFixed(2)}`, hudX + 10, hudY + 48);
   ctx.fillText(`X→note  Y→density`, hudX + 10, hudY + 68);
 
   rPulse += (1 - rPulse) * 0.06;
 }
 
 document.getElementById("gate")?.addEventListener("click", async () => {
-  await Tone.start();            
+  await Tone.start();
   startSound();
   draw();
 
@@ -142,7 +162,7 @@ document.getElementById("gate")?.addEventListener("click", async () => {
   });
 
   document.getElementById("gate").style.display = "none";
-
+  
 });
 
 function resize() {
