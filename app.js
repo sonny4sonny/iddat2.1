@@ -19,11 +19,18 @@ const SCALE_DARK  = ["C3","Eb3","F3","G3","Bb3"];
 function startSound() {
   const reverb = new Tone.Reverb({ decay: 3, wet: 0.3 }).toDestination();
 
-  synth = new Tone.PluckSynth({
-    attackNoise: 1,
-    dampening: 1800,
-    resonance: 0.85
-  }).connect(reverb);
+  synth = new Tone.DuoSynth({
+  harmonicity: 1.5,
+  voice0: {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.02, decay: 0.4, sustain: 0.2, release: 0.5 }
+  },
+  voice1: {
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.05, decay: 0.3, sustain: 0.1, release: 0.5 }
+  },
+  volume: -6
+}).connect(reverb);
 
   kick = new Tone.MembraneSynth().connect(reverb);
 
