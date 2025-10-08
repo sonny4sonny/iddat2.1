@@ -17,12 +17,12 @@ const SCALE_LIGHT = ["C5","D5","E5","G5","A5"];
 const SCALE_DARK  = ["C3","Eb3","F3","G3","Bb3"]; 
 
 function startSound() {
-  
   const reverb = new Tone.Reverb({ decay: 3, wet: 0.3 }).toDestination();
 
-  synth = new Tone.Synth({
-    oscillator: { type: "sine" },
-    envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.3 }
+  synth = new Tone.PluckSynth({
+    attackNoise: 1,
+    dampening: 1800,
+    resonance: 0.85
   }).connect(reverb);
 
   kick = new Tone.MembraneSynth().connect(reverb);
@@ -39,35 +39,23 @@ function startSound() {
 
   melodyLoop = new Tone.Loop(time => {
     const scale = mode === "light" ? SCALE_LIGHT : SCALE_DARK;
-
     const idx = Math.max(0, Math.min(scale.length - 1, Math.floor(fx * scale.length)));
     const note = scale[idx];
     const density = 0.2 + fy * 0.8;
-    const detune = (fx - 0.5) * 600;
-    const oscType = mode === "light" ? "triangle" : "sine";
-
-    synth.set({ detune, oscillator: { type: oscType } });
-
     if (Math.random() < density) {
       synth.triggerAttackRelease(note, "8n", time);
     }
   }, "8n").start(0);
 
-const padNotes = mode === "light"
-  ? ["C4","E4","A4","G4"]
-  : ["C3","Eb3","G3","Bb3"];
-let pIndex = 0;
-
-padLoop = new Tone.Loop(time => {
-  pad.triggerAttackRelease(padNotes[pIndex], "2n", time);
-  pIndex = (pIndex + 1) % padNotes.length;
-}, "2n").start(0);
+  const padNotes = mode === "light"
+    ? ["C4","E4","A4","G4"]
+    : ["C3","Eb3","G3","Bb3"];
+  let pIndex = 0;
 
   padLoop = new Tone.Loop(time => {
-    pad.triggerRelease(chords[chordIndex], time);
-    chordIndex = (chordIndex + 1) % chords.length;
-    pad.triggerAttack(chords[chordIndex], time);
-  }, "4m").start(0);
+    pad.triggerAttackRelease(padNotes[pIndex], "1n", time);
+    pIndex = (pIndex + 1) % padNotes.length;
+  }, "2n").start(0);
 
   Tone.Transport.start();
 }
@@ -162,7 +150,6 @@ document.getElementById("gate")?.addEventListener("click", async () => {
   });
 
   document.getElementById("gate").style.display = "none";
-  
 });
 
 function resize() {
