@@ -16,6 +16,31 @@
       background:rgba(0,0,0,0.8); color:white;
       font-family:sans-serif;
       cursor:pointer;
+      z-index:10;
+    }
+    #controls {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.4);
+      padding: 10px 14px;
+      border-radius: 10px;
+      color: white;
+      font-family: monospace;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 5;
+    }
+    #controls label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    #controls input[type="range"] {
+      width: 150px;
+      cursor: pointer;
     }
   </style>
 
@@ -23,13 +48,30 @@
 </head>
 <body>
   <canvas id="vis"></canvas>
+
   <div id="gate">
-  <div>
-    <h1>Tap to Start</h1>
-    <p>Location tempo, day or night sets mood.<br>
-       Drag across the screen to bend pitch and rhythm.</p>
+    <div>
+      <h1>Tap to Start</h1>
+      <p>Location tempo, day or night sets mood.<br>
+         Drag across the screen to bend pitch and rhythm.</p>
+    </div>
   </div>
-</div>
+
+  <div id="controls">
+    <label>Master Volume
+      <input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.8">
+    </label>
+    <label>Synth Volume
+      <input type="range" id="synthVol" min="0" max="1" step="0.01" value="0.8">
+    </label>
+    <label>Pad Volume
+      <input type="range" id="padVol" min="0" max="1" step="0.01" value="0.8">
+    </label>
+    <label>Kick Volume
+      <input type="range" id="kickVol" min="0" max="1" step="0.01" value="0.8">
+    </label>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

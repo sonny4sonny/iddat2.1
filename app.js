@@ -7,37 +7,45 @@ let dragging = false;
 let fx = 0.5, fy = 0.5;
 let lat = 0, lon = 0;
 let bpmValue = 120;
-let mode = "light"; 
+let mode = "light";
 let isDay = null;
 let rPulse = 1;
 
-let synth, kick, pad, kickLoop, melodyLoop, padLoop;
+let synth, kick, pad;
+let synthGain, padGain, kickGain, masterGain;
+let kickLoop, melodyLoop, padLoop;
 
-const SCALE_LIGHT = ["C5","D5","E5","G5","A5"]; 
-const SCALE_DARK  = ["C3","Eb3","F3","G3","Bb3"]; 
+const SCALE_LIGHT = ["C5","D5","E5","G5","A5"];
+const SCALE_DARK  = ["C3","Eb3","F3","G3","Bb3"];
 
 function startSound() {
-  const reverb = new Tone.Reverb({ decay: 3, wet: 0.3 }).toDestination();
+  masterGain = new Tone.Gain(0.8).toDestination();
+
+  const reverb = new Tone.Reverb({ decay: 3, wet: 0.3 }).connect(masterGain);
+
+  synthGain = new Tone.Gain(0.8).connect(reverb);
+  padGain = new Tone.Gain(0.8).connect(reverb);
+  kickGain = new Tone.Gain(0.8).connect(reverb);
 
   synth = new Tone.DuoSynth({
-  harmonicity: 1.5,
-  voice0: {
-    oscillator: { type: "triangle" },
-    envelope: { attack: 0.02, decay: 0.4, sustain: 0.2, release: 0.5 }
-  },
-  voice1: {
-    oscillator: { type: "sine" },
-    envelope: { attack: 0.05, decay: 0.3, sustain: 0.1, release: 0.5 }
-  },
-  volume: -6
-}).connect(reverb);
+    harmonicity: 1.5,
+    voice0: {
+      oscillator: { type: "triangle" },
+      envelope: { attack: 0.02, decay: 0.4, sustain: 0.2, release: 0.5 }
+    },
+    voice1: {
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.05, decay: 0.3, sustain: 0.1, release: 0.5 }
+    },
+    volume: -6
+  }).connect(synthGain);
 
-  kick = new Tone.MembraneSynth().connect(reverb);
+  kick = new Tone.MembraneSynth().connect(kickGain);
 
   pad = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: mode === "light" ? "triangle" : "sine" },
     envelope: { attack: 1, decay: 1, sustain: 0.7, release: 4 }
-  }).connect(reverb);
+  }).connect(padGain);
 
   kickLoop = new Tone.Loop(time => {
     kick.triggerAttackRelease("C2", "8n", time);
@@ -64,11 +72,33 @@ function startSound() {
     pIndex = (pIndex + 1) % padNotes.length;
   }, "2n").start(0);
 
+  linkVolumeControls();
+
   Tone.Transport.start();
 }
 
+function linkVolumeControls() {
+  const masterSlider = document.getElementById("masterVol");
+  const synthSlider = document.getElementById("synthVol");
+  const padSlider = document.getElementById("padVol");
+  const kickSlider = document.getElementById("kickVol");
+
+  masterSlider.addEventListener("input", () => {
+    masterGain.gain.value = parseFloat(masterSlider.value);
+  });
+  synthSlider.addEventListener("input", () => {
+    synthGain.gain.value = parseFloat(synthSlider.value);
+  });
+  padSlider.addEventListener("input", () => {
+    padGain.gain.value = parseFloat(padSlider.value);
+  });
+  kickSlider.addEventListener("input", () => {
+    kickGain.gain.value = parseFloat(kickSlider.value);
+  });
+}
+
 async function updateFromGeo() {
-  const raw = 90 + ((lon + 180) / 360) * 80; 
+  const raw = 90 + ((lon + 180) / 360) * 80;
   bpmValue = Math.round(raw / 2) * 2;
   Tone.Transport.bpm.value = bpmValue;
 
@@ -106,10 +136,7 @@ function handlePointer(e) {
 
 function draw() {
   requestAnimationFrame(draw);
-
-  const bg = mode === "light"
-    ? `hsl(45, 80%, 75%)`
-    : `hsl(210, 60%, 18%)`;
+  const bg = mode === "light" ? `hsl(45, 80%, 75%)` : `hsl(210, 60%, 18%)`;
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
